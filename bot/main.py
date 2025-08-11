@@ -13,6 +13,8 @@ import httpx
 from dotenv import load_dotenv
 from urllib.parse import quote
 
+from .math_pretty import to_telegram_blocks
+
 
 def load_config_from_env() -> Tuple[str, str, str, Optional[int]]:
     load_dotenv()
@@ -151,6 +153,22 @@ async def on_img(message: Message, defaults: Tuple[str, str, Optional[int]]) -> 
     await message.answer_photo(photo=BufferedInputFile(image_bytes, filename="pollinations.jpg"), caption=caption)
 
 
+async def on_math(message: Message) -> None:
+    raw = extract_args_after_command(message.text or "")
+    if not raw:
+        await message.answer("Использование: /math <LaTeX или выражение>. Пример: /math \\int_0^1 x^2 dx")
+        return
+    blocks = to_telegram_blocks(raw)
+    if not blocks:
+        await message.answer("Не удалось обработать выражение.")
+        return
+    for kind, content in blocks:
+        if kind == "text":
+            await message.answer(text=content, parse_mode="HTML")
+        else:  # code block
+            await message.answer(text=f"<pre><code>{content}</code></pre>", parse_mode="HTML")
+
+
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -162,6 +180,7 @@ async def main() -> None:
     # Handlers
     dp.message.register(on_start, Command("start"))
     dp.message.register(lambda m: on_img(m, (default_model, default_size, default_seed)), Command("img"))
+    dp.message.register(on_math, Command("math"))
 
     logging.info("Bot is starting polling…")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
